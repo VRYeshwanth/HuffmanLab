@@ -212,8 +212,8 @@ export default function HuffmanTree({
 
   if (!root) {
     return (
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-500">
-        No Huffman tree constructed yet. Enter text and click "Analyze & Encode".
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500">
+        No Huffman tree constructed yet. Enter text and click "Encode Text".
       </div>
     );
   }

@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import Header from './components/Header.jsx';
 import TextInput from './components/TextInput.jsx';
 import CompressionStats from './components/CompressionStats.jsx';
-import FrequencyTable from './components/FrequencyTable.jsx';
-import HuffmanTree from './components/HuffmanTree.jsx';
-import TreeStepper from './components/TreeStepper.jsx';
 import EncodedOutput from './components/EncodedOutput.jsx';
+import HuffmanTree from './components/HuffmanTree.jsx';
+import FrequencyTable from './components/FrequencyTable.jsx';
 import DecodingPanel from './components/DecodingPanel.jsx';
 import FileCompressor from './components/FileCompressor.jsx';
 import Footer from './components/Footer.jsx';
@@ -15,35 +14,24 @@ import { encodeText } from './algorithms/encode.js';
 import { calculateCompressionStats } from './algorithms/compressionStats.js';
 import { decodeBitstream, verifyLossless } from './algorithms/decode.js';
 
-import {
-  BarChart3,
-  GitFork,
-  Cpu,
-  TableProperties,
-  Binary,
-  CheckCircle,
-  HardDrive,
-  Sparkles,
-} from 'lucide-react';
-
-const INITIAL_TEXT = 'Huffman coding is an optimal prefix code algorithm used for lossless data compression. 🚀';
+import { GitFork, TableProperties, CheckCircle, ChevronDown, HardDrive } from 'lucide-react';
 
 export default function App() {
-  const [text, setText] = useState(INITIAL_TEXT);
+  const [text, setText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'tree' | 'stepper' | 'table' | 'bitstream' | 'decode' | 'file'
+  const [result, setResult] = useState(null);
+  const [activeTab, setActiveTab] = useState('tree'); // 'tree' | 'table' | 'decode'
   const [selectedSymbol, setSelectedSymbol] = useState(null);
 
-  // Analysis state
-  const [result, setResult] = useState(null);
+  const resultsRef = useRef(null);
 
-  // Analysis function
-  const runAnalysis = useCallback((inputTextToAnalyze) => {
-    const rawText = inputTextToAnalyze !== undefined ? inputTextToAnalyze : text;
+  // Checks if text in textarea differs from encoded results
+  const isStale = Boolean(result && text !== result.originalText);
 
-    if (!rawText || rawText.trim().length === 0) {
-      setError('Please enter some text or load a sample before analyzing.');
+  const handleEncode = () => {
+    if (!text || text.trim().length === 0) {
+      setError('Please enter some text or click "Load Example" before encoding.');
       setResult(null);
       return;
     }
@@ -54,21 +42,25 @@ export default function App() {
     try {
       // 1. Build Huffman tree deterministically
       const { root, codeTable, frequencyTable, steps, totalSymbols } =
-        buildHuffmanTree(rawText);
+        buildHuffmanTree(text);
 
-      // 2. Encode text
+      // 2. Encode text into bitstream
       const { bitstream, bitLength, packedBytes, paddingBits } = encodeText(
-        rawText,
+        text,
         codeTable
       );
 
       // 3. Calculate mathematically accurate stats
       const stats = calculateCompressionStats(
-        rawText,
+        text,
         bitstream,
         frequencyTable,
         codeTable
       );
+
+      // 4. Verify lossless reconstruction
+      const decodeResult = decodeBitstream(bitstream, root, text);
+      const verification = verifyLossless(text, decodeResult.decodedText);
 
       setResult({
         root,
@@ -81,20 +73,21 @@ export default function App() {
         packedBytes,
         paddingBits,
         stats,
-        originalText: rawText,
+        originalText: text,
+        isExactMatch: verification.exactMatch && !decodeResult.error,
       });
+
+      // Smooth scroll to results
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
     } catch (err) {
-      setError(err.message || 'Error occurred while analyzing text.');
+      setError(err.message || 'Error occurred while encoding text.');
       setResult(null);
     } finally {
       setIsLoading(false);
     }
-  }, [text]);
-
-  // Run on mount with initial text
-  useEffect(() => {
-    runAnalysis(INITIAL_TEXT);
-  }, []);
+  };
 
   const handleClear = () => {
     setText('');
@@ -108,160 +101,111 @@ export default function App() {
     if (error) setError(null);
   };
 
-  const tabs = [
-    { id: 'overview', label: 'Overview & Stats', icon: BarChart3 },
-    { id: 'tree', label: 'Huffman Tree', icon: GitFork, badge: result?.frequencyTable?.length },
-    { id: 'stepper', label: 'Construction Steps', icon: Cpu, badge: result?.steps?.length },
-    { id: 'table', label: 'Frequency & Codes', icon: TableProperties },
-    { id: 'bitstream', label: 'Encoded Bits', icon: Binary },
-    { id: 'decode', label: 'Lossless Decoder', icon: CheckCircle },
-    { id: 'file', label: 'Binary File (.huff)', icon: HardDrive },
+  const detailTabs = [
+    { id: 'tree', label: 'Huffman Tree', icon: GitFork },
+    { id: 'table', label: 'Character Codes', icon: TableProperties },
+    { id: 'decode', label: 'Decode & Verify', icon: CheckCircle },
   ];
 
   return (
     <div className="min-h-screen bg-[#0b0f19] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
       <Header />
 
-      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Input Section */}
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 py-8 space-y-6">
+        {/* Section B: Text Input */}
         <TextInput
           text={text}
           onChange={handleTextChange}
-          onAnalyze={() => runAnalysis(text)}
+          onEncode={handleEncode}
           onClear={handleClear}
           isLoading={isLoading}
           error={error}
+          isStale={isStale}
         />
 
-        {/* Results Section */}
+        {/* Section C: Results Section (Rendered ONLY after encoding) */}
         {result && (
-          <div className="space-y-6">
-            {/* Nav Tabs */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-2 border-b border-slate-800 scrollbar-none">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center space-x-2 px-3.5 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                      isActive
-                        ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 shadow-lg shadow-cyan-950/40'
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
-                    <span>{tab.label}</span>
-                    {tab.badge && (
-                      <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-slate-800 text-slate-300">
-                        {tab.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+          <div ref={resultsRef} className="space-y-6 pt-2">
+            {/* LEVEL 1: Essential Results */}
+            <div className="space-y-4">
+              {/* 3 Compact Metric Cards */}
+              <CompressionStats stats={result.stats} />
+
+              {/* Encoded Bitstream with Lossless Status & Copy Button */}
+              <EncodedOutput
+                bitstream={result.bitstream}
+                bitLength={result.bitLength}
+                isExactMatch={result.isExactMatch}
+              />
             </div>
 
-            {/* TAB CONTENTS */}
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <CompressionStats stats={result.stats} />
+            {/* LEVEL 2: Additional Details Tabs */}
+            <div className="space-y-3">
+              {/* Tab Selector */}
+              <div className="flex border-b border-slate-800 space-x-1">
+                {detailTabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all ${
+                        isActive
+                          ? 'border-cyan-400 text-cyan-300 bg-cyan-950/20'
+                          : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-semibold text-slate-200">Frequency Distribution Preview</span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('table')}
-                        className="text-cyan-400 hover:underline"
-                      >
-                        View Full Table →
-                      </button>
-                    </div>
-                    <FrequencyTable
-                      frequencyTable={result.frequencyTable.slice(0, 6)}
-                      selectedSymbol={selectedSymbol}
-                      onSelectSymbol={(sym) => {
-                        setSelectedSymbol(sym);
-                        setActiveTab('tree');
-                      }}
-                    />
-                  </div>
+              {/* Tab Content: Only render the selected tab */}
+              {activeTab === 'tree' && (
+                <HuffmanTree
+                  root={result.root}
+                  selectedSymbol={selectedSymbol}
+                  onSelectSymbol={setSelectedSymbol}
+                />
+              )}
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-semibold text-slate-200">Tree Preview</span>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('tree')}
-                        className="text-cyan-400 hover:underline"
-                      >
-                        Interactive Canvas →
-                      </button>
-                    </div>
-                    <HuffmanTree
-                      root={result.root}
-                      selectedSymbol={selectedSymbol}
-                      onSelectSymbol={setSelectedSymbol}
-                    />
-                  </div>
-                </div>
+              {activeTab === 'table' && (
+                <FrequencyTable
+                  frequencyTable={result.frequencyTable}
+                  selectedSymbol={selectedSymbol}
+                  onSelectSymbol={(sym) => {
+                    setSelectedSymbol(sym);
+                    setActiveTab('tree');
+                  }}
+                />
+              )}
 
+              {activeTab === 'decode' && (
                 <DecodingPanel
                   bitstream={result.bitstream}
                   root={result.root}
                   originalText={result.originalText}
                 />
+              )}
+            </div>
+
+            {/* Unobtrusive Advanced Section: Binary File Tool */}
+            <details className="group border border-slate-800/80 rounded-xl bg-slate-900/40 overflow-hidden">
+              <summary className="p-3.5 text-xs font-medium text-slate-400 hover:text-slate-200 flex items-center justify-between cursor-pointer select-none">
+                <span className="flex items-center space-x-2">
+                  <HardDrive className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Advanced: Standalone Binary File (.huff) Compressor & Decompressor</span>
+                </span>
+                <ChevronDown className="w-4 h-4 text-slate-500 group-open:rotate-180 transition-transform" />
+              </summary>
+              <div className="p-4 border-t border-slate-800/80 bg-slate-950/50">
+                <FileCompressor />
               </div>
-            )}
-
-            {activeTab === 'tree' && (
-              <HuffmanTree
-                root={result.root}
-                selectedSymbol={selectedSymbol}
-                onSelectSymbol={setSelectedSymbol}
-              />
-            )}
-
-            {activeTab === 'stepper' && (
-              <TreeStepper steps={result.steps} />
-            )}
-
-            {activeTab === 'table' && (
-              <FrequencyTable
-                frequencyTable={result.frequencyTable}
-                selectedSymbol={selectedSymbol}
-                onSelectSymbol={(sym) => {
-                  setSelectedSymbol(sym);
-                  setActiveTab('tree');
-                }}
-              />
-            )}
-
-            {activeTab === 'bitstream' && (
-              <EncodedOutput
-                bitstream={result.bitstream}
-                bitLength={result.bitLength}
-                packedBytes={result.packedBytes}
-                paddingBits={result.paddingBits}
-                codeTable={result.codeTable}
-              />
-            )}
-
-            {activeTab === 'decode' && (
-              <DecodingPanel
-                bitstream={result.bitstream}
-                root={result.root}
-                originalText={result.originalText}
-              />
-            )}
-
-            {activeTab === 'file' && (
-              <FileCompressor />
-            )}
+            </details>
           </div>
         )}
       </main>
