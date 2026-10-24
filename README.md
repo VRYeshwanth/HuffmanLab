@@ -65,37 +65,42 @@ Stand-alone compressed `.huff` files use a documented, self-contained binary lay
 ## 📂 Project Structure
 
 ```
-HuffmanLab/
-├── frontend/
-│   ├── src/
-│   │   ├── algorithms/
-│   │   │   ├── MinHeap.js             # Priority queue with deterministic tie-breaking
-│   │   │   ├── huffman.js             # Huffman tree builder & deterministic code generator
-│   │   │   ├── encode.js              # Bitstream encoder & physical bit packing
-│   │   │   ├── decode.js              # Real tree-traversal decoder & verification
-│   │   │   ├── compressionStats.js    # Accurate metrics & Shannon entropy
-│   │   │   └── binaryFile.js          # Self-contained .huff packer & unpacker
-│   │   ├── components/
-│   │   │   ├── Header.jsx             # Minimalist top header
-│   │   │   ├── TextInput.jsx          # Clean text area, example loader, Encode button
-│   │   │   ├── CompressionStats.jsx   # 3 essential metric cards & explanation disclosure
-│   │   │   ├── EncodedOutput.jsx      # Bitstream viewer (8-bit blocks, copy, lossless badge)
-│   │   │   ├── HuffmanTree.jsx        # Custom SVG tree with pan/zoom & path tracing
-│   │   │   ├── FrequencyTable.jsx     # Searchable Character Codes table
-│   │   │   ├── DecodingPanel.jsx      # Decode & Verify tab with reconstructed text
-│   │   │   ├── FileCompressor.jsx     # Advanced .txt <-> .huff standalone file tool
-│   │   │   └── Footer.jsx             # Brief explanation & algorithm note
-│   │   ├── utils/
-│   │   │   ├── formatSymbol.js        # Formatting for SPACE, TAB, NEWLINE, U+XXXX
-│   │   │   └── formatBytes.js         # Byte, bit, and percentage formatters
-│   │   ├── tests/
-│   │   │   └── huffman.test.js        # Vitest suite (23 unit tests)
-│   │   ├── App.jsx                    # Main application controller with progressive disclosure
-│   │   ├── Main.jsx                   # React root entry
-│   │   └── index.css                  # Tailwind styles
-│   ├── package.json
-│   └── vite.config.js
-└── README.md
+Directory structure:
+└── HuffmanLab/
+    ├── frontend/
+    │   ├── eslint.config.js
+    │   ├── index.html
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   ├── src/
+    │   │   ├── algorithms/
+    │   │   │   ├── binaryFile.js
+    │   │   │   ├── compressionStats.js
+    │   │   │   ├── decode.js
+    │   │   │   ├── encode.js
+    │   │   │   ├── huffman.js
+    │   │   │   └── MinHeap.js
+    │   │   ├── App.jsx
+    │   │   ├── components/
+    │   │   │   ├── CompressionStats.jsx
+    │   │   │   ├── DecodingPanel.jsx
+    │   │   │   ├── EncodedOutput.jsx
+    │   │   │   ├── FileCompressor.jsx
+    │   │   │   ├── Footer.jsx
+    │   │   │   ├── FrequencyTable.jsx
+    │   │   │   ├── Header.jsx
+    │   │   │   ├── HuffmanTree.jsx
+    │   │   │   ├── TextInput.jsx
+    │   │   │   └── TreeStepper.jsx
+    │   │   ├── index.css
+    │   │   ├── main.jsx
+    │   │   ├── tests/
+    │   │   │   └── huffman.test.js
+    │   │   └── utils/
+    │   │       ├── formatBytes.js
+    │   │       └── formatSymbol.js
+    │   └── vite.config.js
+    └── README.md
 ```
 
 ---
