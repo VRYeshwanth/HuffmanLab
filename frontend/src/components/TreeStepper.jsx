@@ -216,7 +216,7 @@ export default function TreeStepper({ steps }) {
 
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-mono">
             {/* Left Node */}
-            <div className="flex flex-col items-center bg-cyan-950/60 border border-cyan-800/80 rounded-xl p-3 min-w-[120px]">
+            <div className="flex flex-col items-center bg-cyan-950/60 border border-cyan-800/80 rounded-xl p-3 min-w-30">
               <span className="text-[10px] text-cyan-400 font-sans uppercase mb-1">
                 Left Child (Branch '0')
               </span>
@@ -234,7 +234,7 @@ export default function TreeStepper({ steps }) {
 
             {/* Right Node (if exists) */}
             {currentStep.extractedRight ? (
-              <div className="flex flex-col items-center bg-amber-950/60 border border-amber-800/80 rounded-xl p-3 min-w-[120px]">
+              <div className="flex flex-col items-center bg-amber-950/60 border border-amber-800/80 rounded-xl p-3 min-w-30">
                 <span className="text-[10px] text-amber-400 font-sans uppercase mb-1">
                   Right Child (Branch '1')
                 </span>
@@ -254,7 +254,7 @@ export default function TreeStepper({ steps }) {
             <ArrowRight className="w-5 h-5 text-indigo-400" />
 
             {/* Created Parent Node */}
-            <div className="flex flex-col items-center bg-indigo-950/70 border border-indigo-700 rounded-xl p-3 min-w-[130px] shadow-lg shadow-indigo-950/50">
+            <div className="flex flex-col items-center bg-indigo-950/70 border border-indigo-700 rounded-xl p-3 min-w-32.5 shadow-lg shadow-indigo-950/50">
               <span className="text-[10px] text-indigo-300 font-sans uppercase mb-1">
                 New Parent Node
               </span>

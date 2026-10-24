@@ -91,7 +91,7 @@ export default function DecodingPanel({
 
       {/* Reconstructed Text Container */}
       <div className="space-y-1">
-        <div className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 font-mono text-xs text-slate-200 leading-relaxed max-h-[200px] overflow-y-auto whitespace-pre-wrap select-all">
+        <div className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3.5 font-mono text-xs text-slate-200 leading-relaxed max-h-50 overflow-y-auto whitespace-pre-wrap select-all">
           {decodeResult.decodedText}
         </div>
       </div>

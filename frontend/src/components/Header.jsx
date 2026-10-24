@@ -10,7 +10,7 @@ export default function Header() {
             <Binary className="w-4 h-4" />
           </div>
           <div>
-            <h1 className="text-base font-bold tracking-tight text-white leading-none">
+            <h1 className="text-xl font-bold tracking-tight text-white leading-none">
               HuffmanLab
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">

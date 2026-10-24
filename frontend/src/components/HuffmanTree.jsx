@@ -3,25 +3,43 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  Minimize2,
   RotateCcw,
-  Sparkles,
-  Info,
   Navigation,
+  Download,
+  Image,
+  FileCode,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { formatSymbol } from '../utils/formatSymbol.js';
 import { getPathToSymbol } from '../algorithms/huffman.js';
 
 /**
  * Calculates tidy binary tree coordinates.
- * Computes horizontal spanning widths recursively to ensure no node overlap.
+ * Adapts horizontal and vertical spacing based on leaf count to prevent excessive width explosion.
  */
 function layoutTree(root) {
-  if (!root) return { nodes: [], edges: [], bounds: { minX: 0, maxX: 800, minY: 0, maxY: 600 } };
+  if (!root) return { nodes: [], edges: [], bounds: { minX: 0, maxX: 800, minY: 0, maxY: 600 }, leafCount: 0 };
 
-  const LEVEL_HEIGHT = 90;
-  const SIBLING_GAP = 70;
+  // Count leaves to choose optimal spacing
+  let leafCount = 0;
+  function countLeaves(n) {
+    if (!n) return;
+    if (n.isLeaf || (!n.left && !n.right)) {
+      leafCount++;
+    } else {
+      countLeaves(n.left);
+      countLeaves(n.right);
+    }
+  }
+  countLeaves(root);
 
-  // Step 1: Assign subtree width in units
+  // Dynamic spacing based on tree size:
+  // Compact spacing for large alphabets keeps the tree readable without spreading thousands of pixels wide
+  const SIBLING_GAP = leafCount > 35 ? 44 : leafCount > 18 ? 54 : 68;
+  const LEVEL_HEIGHT = leafCount > 35 ? 74 : leafCount > 18 ? 82 : 90;
+
   function computeSubtreeWidth(node) {
     if (!node) return 0;
     if (node.isLeaf || (!node.left && !node.right)) {
@@ -40,7 +58,6 @@ function layoutTree(root) {
   const flatNodes = [];
   const flatEdges = [];
 
-  // Step 2: Assign x, y positions
   function assignCoordinates(node, depth, leftBoundary) {
     if (!node) return;
 
@@ -99,11 +116,12 @@ function layoutTree(root) {
     nodes: flatNodes,
     edges: flatEdges,
     bounds: {
-      minX: minX - 80,
-      maxX: maxX + 80,
-      minY: minY - 50,
-      maxY: maxY + 80,
+      minX: minX - 60,
+      maxX: maxX + 60,
+      minY: minY - 40,
+      maxY: maxY + 60,
     },
+    leafCount,
   };
 }
 
@@ -113,13 +131,20 @@ export default function HuffmanTree({
   onSelectSymbol,
 }) {
   const containerRef = useRef(null);
+  const svgRef = useRef(null);
+
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+  // Fullscreen and download state
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+
   // Calculate layout
-  const { nodes, edges, bounds } = useMemo(() => {
+  const { nodes, edges, bounds, leafCount } = useMemo(() => {
     return layoutTree(root);
   }, [root]);
 
@@ -147,40 +172,98 @@ export default function HuffmanTree({
     return { pathNodeIds: nIds, pathEdgeIds: eIds, tracedCode: codeStr };
   }, [root, selectedSymbol]);
 
-  // Center & Fit View to Screen
-  const fitToView = useCallback(() => {
-    if (!containerRef.current || nodes.length === 0) return;
-    const rect = containerRef.current.getBoundingClientRect();
-    const width = rect.width;
-    const height = rect.height;
+  // Fit & Center View
+  const fitToView = useCallback(
+    (forceFitAll = false) => {
+      if (!containerRef.current || nodes.length === 0) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const width = rect.width || 800;
+      const height = rect.height || 500;
 
-    const treeW = bounds.maxX - bounds.minX;
-    const treeH = bounds.maxY - bounds.minY;
+      const treeW = bounds.maxX - bounds.minX;
+      const treeH = bounds.maxY - bounds.minY;
 
-    if (treeW <= 0 || treeH <= 0) return;
+      if (treeW <= 0 || treeH <= 0) return;
 
-    const scaleX = (width - 80) / treeW;
-    const scaleY = (height - 80) / treeH;
-    const newScale = Math.min(Math.max(Math.min(scaleX, scaleY), 0.3), 1.6);
+      const scaleX = (width - 60) / treeW;
+      const scaleY = (height - 60) / treeH;
+      const fullFitScale = Math.min(scaleX, scaleY);
 
-    const midX = (bounds.minX + bounds.maxX) / 2;
-    const midY = (bounds.minY + bounds.maxY) / 2;
+      if (forceFitAll) {
+        const newScale = Math.min(Math.max(fullFitScale, 0.12), 1.5);
+        const midX = (bounds.minX + bounds.maxX) / 2;
+        const midY = (bounds.minY + bounds.maxY) / 2;
+        setScale(newScale);
+        setPan({
+          x: width / 2 - midX * newScale,
+          y: height / 2 - midY * newScale,
+        });
+        return;
+      }
 
-    setScale(newScale);
-    setPan({
-      x: width / 2 - midX * newScale,
-      y: height / 2 - midY * newScale,
-    });
-  }, [bounds, nodes.length]);
+      // Default intelligent view:
+      // If the full fit scale is too tiny (< 0.45), default to a readable zoom centered at the root!
+      if (fullFitScale < 0.45) {
+        const readableScale = isFullscreen ? 0.75 : 0.65;
+        setScale(readableScale);
+        setPan({
+          x: width / 2 - (root?.x || 0) * readableScale,
+          y: 45,
+        });
+      } else {
+        const newScale = Math.min(Math.max(fullFitScale, 0.25), 1.3);
+        const midX = (bounds.minX + bounds.maxX) / 2;
+        const midY = (bounds.minY + bounds.maxY) / 2;
+        setScale(newScale);
+        setPan({
+          x: width / 2 - midX * newScale,
+          y: height / 2 - midY * newScale,
+        });
+      }
+    },
+    [bounds, nodes.length, root, isFullscreen]
+  );
 
-  // Auto-fit on initial load or root change
+  // Auto-fit on initial mount or root change
   useEffect(() => {
-    fitToView();
+    fitToView(false);
   }, [fitToView]);
+
+  // Refit when toggling fullscreen
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fitToView(false);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [isFullscreen, fitToView]);
+
+  // ESC key exits fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isFullscreen) {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
+
+  // Close download menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('#download-menu-container')) {
+        setShowDownloadMenu(false);
+      }
+    };
+    if (showDownloadMenu) {
+      window.addEventListener('click', handleClickOutside);
+      return () => window.removeEventListener('click', handleClickOutside);
+    }
+  }, [showDownloadMenu]);
 
   // Mouse pan handlers
   const handleMouseDown = (e) => {
-    if (e.button !== 0) return; // Only left click
+    if (e.button !== 0) return;
     setIsDragging(true);
     setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
   };
@@ -197,17 +280,110 @@ export default function HuffmanTree({
     setIsDragging(false);
   };
 
-  // Wheel zoom
   const handleWheel = (e) => {
     e.preventDefault();
     const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
-    const newScale = Math.min(Math.max(scale * zoomFactor, 0.2), 3.0);
+    const newScale = Math.min(Math.max(scale * zoomFactor, 0.1), 3.0);
     setScale(newScale);
   };
 
-  const resetView = () => {
-    setScale(1);
-    fitToView();
+  const resetToRoot = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const readableScale = 0.8;
+    setScale(readableScale);
+    setPan({
+      x: rect.width / 2 - (root?.x || 0) * readableScale,
+      y: 50,
+    });
+  };
+
+  // Download high-resolution image (PNG or SVG)
+  const handleDownload = (format = 'png') => {
+    setShowDownloadMenu(false);
+    if (!svgRef.current || nodes.length === 0) return;
+
+    try {
+      const treeW = bounds.maxX - bounds.minX;
+      const treeH = bounds.maxY - bounds.minY;
+
+      const serializer = new XMLSerializer();
+      const exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      exportSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      exportSvg.setAttribute('viewBox', `${bounds.minX} ${bounds.minY} ${treeW} ${treeH}`);
+      exportSvg.setAttribute('width', `${treeW}`);
+      exportSvg.setAttribute('height', `${treeH}`);
+      exportSvg.style.backgroundColor = '#0b0f19';
+
+      const defs = svgRef.current.querySelector('defs')?.cloneNode(true);
+      if (defs) exportSvg.appendChild(defs);
+
+      const treeGroup = svgRef.current.querySelector('g[data-tree-group]')?.cloneNode(true);
+      if (treeGroup) {
+        treeGroup.removeAttribute('transform');
+        exportSvg.appendChild(treeGroup);
+      }
+
+      const svgString = serializer.serializeToString(exportSvg);
+
+      if (format === 'svg') {
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'huffman-tree.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        triggerSuccessFeedback();
+        return;
+      }
+
+      // PNG Export via Canvas (2x scale for sharp high-res rendering)
+      const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new window.Image();
+
+      img.onload = () => {
+        const scaleFactor = Math.min(2.5, 7000 / Math.max(treeW, treeH));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(treeW * scaleFactor);
+        canvas.height = Math.round(treeH * scaleFactor);
+
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0b0f19';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        URL.revokeObjectURL(url);
+
+        canvas.toBlob((pngBlob) => {
+          if (!pngBlob) return;
+          const pngUrl = URL.createObjectURL(pngBlob);
+          const a = document.createElement('a');
+          a.href = pngUrl;
+          a.download = 'huffman-tree.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(pngUrl);
+          triggerSuccessFeedback();
+        }, 'image/png');
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+      };
+
+      img.src = url;
+    } catch (err) {
+      console.error('Download error:', err);
+    }
+  };
+
+  const triggerSuccessFeedback = () => {
+    setDownloadSuccess(true);
+    setTimeout(() => setDownloadSuccess(false), 2200);
   };
 
   if (!root) {
@@ -218,40 +394,55 @@ export default function HuffmanTree({
     );
   }
 
+  // Adaptive node sizes for compact mode when there are many nodes
+  const isCompact = leafCount > 30;
+  const leafCardW = isCompact ? 56 : 74;
+  const leafCardH = isCompact ? 38 : 46;
+  const internalR = isCompact ? 16 : 19;
+  const bitR = isCompact ? 8.5 : 10;
+
   return (
-    <div className="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col relative">
+    <div
+      className={`${
+        isFullscreen
+          ? 'fixed inset-0 z-50 bg-[#0b0f19] flex flex-col p-4 w-screen h-screen'
+          : 'bg-slate-900/90 border border-slate-800 rounded-xl shadow-lg overflow-hidden flex flex-col relative'
+      }`}
+    >
       {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4 border-b border-slate-800/80 bg-slate-950/60 z-10">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2.5 p-3 sm:p-4 border-b border-slate-800/80 bg-slate-950/70 z-10">
+        <div className="flex items-center space-x-2">
           <h3 className="text-sm font-semibold text-slate-100 flex items-center space-x-2">
-            <span>Interactive Huffman Tree</span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-normal">
+            <span>Huffman Tree</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">
               {nodes.length} nodes
             </span>
           </h3>
-          <p className="text-xs text-slate-400">
-            Drag to pan • Scroll to zoom • Click any leaf node to trace its branch path
-          </p>
+          {scale < 0.45 && !isFullscreen && (
+            <span className="text-[11px] text-cyan-400/90 hidden sm:inline">
+              (Use Fullscreen or Zoom In to inspect subtrees)
+            </span>
+          )}
         </div>
 
-        {/* View Controls */}
-        <div className="flex items-center space-x-2">
+        {/* View Controls & Action Buttons */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2">
           {/* Zoom controls */}
-          <div className="flex items-center bg-slate-800/80 border border-slate-700/70 rounded-lg p-0.5">
+          <div className="flex items-center bg-slate-800/90 border border-slate-700/70 rounded-lg p-0.5">
             <button
               type="button"
-              onClick={() => setScale((s) => Math.min(s * 1.2, 3.0))}
+              onClick={() => setScale((s) => Math.min(s * 1.25, 3.0))}
               className="p-1.5 hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors"
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
-            <span className="text-[11px] font-mono px-2 text-slate-300">
+            <span className="text-[11px] font-mono px-2 text-slate-300 min-w-10.5 text-center">
               {Math.round(scale * 100)}%
             </span>
             <button
               type="button"
-              onClick={() => setScale((s) => Math.max(s * 0.8, 0.2))}
+              onClick={() => setScale((s) => Math.max(s * 0.8, 0.1))}
               className="p-1.5 hover:bg-slate-700 rounded text-slate-300 hover:text-white transition-colors"
               title="Zoom Out"
             >
@@ -259,54 +450,124 @@ export default function HuffmanTree({
             </button>
           </div>
 
-          {/* Fit & Reset */}
+          {/* Fit Whole Tree */}
           <button
             type="button"
-            onClick={fitToView}
-            className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition-colors"
-            title="Fit Tree to Viewport"
+            onClick={() => fitToView(true)}
+            className="px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/70 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition-colors"
+            title="Fit Entire Tree"
           >
-            <Maximize2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Fit</span>
+            Fit All
           </button>
 
+          {/* Focus Root */}
           <button
             type="button"
-            onClick={resetView}
-            className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/70 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition-colors"
-            title="Reset View"
+            onClick={resetToRoot}
+            className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/70 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition-colors"
+            title="Center on Root"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Reset</span>
+            <RotateCcw className="w-3 h-3" />
+            <span className="hidden sm:inline">Root</span>
+          </button>
+
+          {/* Download Image Dropdown */}
+          <div id="download-menu-container" className="relative">
+            <button
+              type="button"
+              onClick={() => setShowDownloadMenu(!showDownloadMenu)}
+              className="flex items-center space-x-1 px-2.5 py-1.5 bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-800/70 text-cyan-300 hover:text-cyan-200 rounded-lg text-xs font-medium transition-colors"
+              title="Download Tree Diagram"
+            >
+              {downloadSuccess ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-emerald-400 font-semibold">Saved!</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download</span>
+                  <ChevronDown className="w-3 h-3" />
+                </>
+              )}
+            </button>
+
+            {showDownloadMenu && (
+              <div className="absolute right-0 mt-1 w-44 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl py-1 z-30 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleDownload('png')}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-slate-200"
+                >
+                  <Image className="w-4 h-4 text-cyan-400" />
+                  <div>
+                    <div className="font-semibold">Download PNG</div>
+                    <div className="text-[10px] text-slate-400">High-resolution image</div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownload('svg')}
+                  className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center space-x-2 text-slate-200 border-t border-slate-800"
+                >
+                  <FileCode className="w-4 h-4 text-purple-400" />
+                  <div>
+                    <div className="font-semibold">Download SVG</div>
+                    <div className="text-[10px] text-slate-400">Scalable vector graphic</div>
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Fullscreen Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700 border border-slate-700/70 rounded-lg text-xs font-medium text-slate-300 hover:text-white transition-colors"
+            title={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Enlarge to Fullscreen'}
+          >
+            {isFullscreen ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Exit Fullscreen</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Fullscreen</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
       {/* Selected Symbol Path Badge / HUD */}
       {selectedSymbol && (
-        <div className="absolute top-18 left-4 z-20 flex items-center space-x-2.5 bg-slate-950/90 border border-cyan-500/40 backdrop-blur-md px-3.5 py-2 rounded-xl shadow-lg shadow-cyan-950/40">
-          <Navigation className="w-4 h-4 text-cyan-400 animate-pulse" />
+        <div className="absolute top-16 left-4 z-20 flex items-center space-x-2 bg-slate-950/90 border border-cyan-500/40 backdrop-blur-md px-3 py-1.5 rounded-lg shadow-lg">
+          <Navigation className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
           <div className="text-xs">
             <span className="text-slate-400">Traced: </span>
             <span className="font-bold text-white">
               {formatSymbol(selectedSymbol).display}
             </span>
             <span className="text-slate-400 ml-2">Code: </span>
-            <span className="font-mono font-bold text-cyan-300 bg-cyan-950 px-1.5 py-0.5 rounded border border-cyan-800/60">
+            <span className="font-mono font-bold text-cyan-300 bg-cyan-950 px-1 py-0.5 rounded border border-cyan-800/60">
               {tracedCode || '0'}
             </span>
           </div>
           <button
             type="button"
             onClick={() => onSelectSymbol(null)}
-            className="text-slate-500 hover:text-slate-300 text-xs ml-2"
+            className="text-slate-500 hover:text-slate-300 text-xs ml-1.5"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* SVG Canvas */}
+      {/* SVG Canvas Area */}
       <div
         ref={containerRef}
         onMouseDown={handleMouseDown}
@@ -314,187 +575,184 @@ export default function HuffmanTree({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
-        className={`w-full h-[540px] bg-slate-950/80 cursor-${
+        className={`w-full ${
+          isFullscreen ? 'flex-1' : 'h-125'
+        } bg-slate-950/80 cursor-${
           isDragging ? 'grabbing' : 'grab'
         } select-none relative overflow-hidden`}
       >
-        <svg className="w-full h-full overflow-visible">
+        <svg ref={svgRef} className="w-full h-full overflow-visible">
           <defs>
-            {/* Glow filter for highlighted path */}
             <filter id="path-glow" x="-20%" y="-20%" width="140%" height="140%">
               <feGaussianBlur stdDeviation="3" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
           </defs>
 
+          {/* Interactive Transform Group */}
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${scale})`}>
-            {/* Edges */}
-            {edges.map((edge) => {
-              const isPath = pathEdgeIds.has(edge.id);
-              const x1 = edge.from.x;
-              const y1 = edge.from.y;
-              const x2 = edge.to.x;
-              const y2 = edge.to.y;
+            {/* Raw Tree Geometry Group (clean for PNG/SVG export) */}
+            <g data-tree-group="true">
+              {/* Edges */}
+              {edges.map((edge) => {
+                const isPath = pathEdgeIds.has(edge.id);
+                const x1 = edge.from.x;
+                const y1 = edge.from.y;
+                const x2 = edge.to.x;
+                const y2 = edge.to.y;
 
-              // Cubic bezier curve path for smooth connection
-              const midY = (y1 + y2) / 2;
-              const pathD = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+                const midY = (y1 + y2) / 2;
+                const pathD = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
 
-              // Midpoint for bit label
-              const labelX = (x1 + x2) / 2;
-              const labelY = (y1 + y2) / 2;
+                const labelX = (x1 + x2) / 2;
+                const labelY = (y1 + y2) / 2;
 
-              return (
-                <g key={edge.id}>
-                  {/* Background shadow line */}
-                  <path
-                    d={pathD}
-                    fill="none"
-                    stroke={isPath ? '#22d3ee' : '#334155'}
-                    strokeWidth={isPath ? 3.5 : 1.5}
-                    strokeDasharray={isPath ? '6,3' : 'none'}
-                    filter={isPath ? 'url(#path-glow)' : 'none'}
-                    className={isPath ? 'transition-all duration-300' : ''}
-                  />
-
-                  {/* Edge bit badge (0: Cyan, 1: Amber) */}
-                  <g transform={`translate(${labelX}, ${labelY})`}>
-                    <circle
-                      r="10"
-                      fill={edge.bit === '0' ? '#083344' : '#451a03'}
-                      stroke={edge.bit === '0' ? '#06b6d4' : '#f59e0b'}
-                      strokeWidth={isPath ? '2' : '1'}
+                return (
+                  <g key={edge.id}>
+                    <path
+                      d={pathD}
+                      fill="none"
+                      stroke={isPath ? '#22d3ee' : '#334155'}
+                      strokeWidth={isPath ? 3.5 : 1.5}
+                      strokeDasharray={isPath ? '6,3' : 'none'}
+                      filter={isPath ? 'url(#path-glow)' : 'none'}
                     />
-                    <text
-                      textAnchor="middle"
-                      dy="3.5"
-                      fill={edge.bit === '0' ? '#67e8f9' : '#fcd34d'}
-                      fontSize="10"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                    >
-                      {edge.bit}
-                    </text>
+
+                    {/* Bit badge (0: Cyan, 1: Amber) */}
+                    <g transform={`translate(${labelX}, ${labelY})`}>
+                      <circle
+                        r={bitR}
+                        fill={edge.bit === '0' ? '#083344' : '#451a03'}
+                        stroke={edge.bit === '0' ? '#06b6d4' : '#f59e0b'}
+                        strokeWidth={isPath ? '2' : '1'}
+                      />
+                      <text
+                        textAnchor="middle"
+                        dy="3.5"
+                        fill={edge.bit === '0' ? '#67e8f9' : '#fcd34d'}
+                        fontSize={isCompact ? '9' : '10'}
+                        fontWeight="bold"
+                        fontFamily="monospace"
+                      >
+                        {edge.bit}
+                      </text>
+                    </g>
                   </g>
-                </g>
-              );
-            })}
+                );
+              })}
 
-            {/* Nodes */}
-            {nodes.map((node) => {
-              const isPath = pathNodeIds.has(node.id);
-              const isLeaf = node.isLeaf;
-              const isSelected = isLeaf && node.symbol === selectedSymbol;
+              {/* Nodes */}
+              {nodes.map((node) => {
+                const isPath = pathNodeIds.has(node.id);
+                const isLeaf = node.isLeaf;
+                const isSelected = isLeaf && node.symbol === selectedSymbol;
 
-              if (isLeaf) {
-                const formatted = formatSymbol(node.symbol);
+                if (isLeaf) {
+                  const formatted = formatSymbol(node.symbol);
+                  return (
+                    <g
+                      key={node.id}
+                      transform={`translate(${node.x}, ${node.y})`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectSymbol(isSelected ? null : node.symbol);
+                      }}
+                      className="cursor-pointer group"
+                    >
+                      <rect
+                        x={-leafCardW / 2}
+                        y={-leafCardH / 2}
+                        width={leafCardW}
+                        height={leafCardH}
+                        rx="8"
+                        fill={isSelected ? '#0c4a6e' : '#0f172a'}
+                        stroke={
+                          isSelected
+                            ? '#38bdf8'
+                            : isPath
+                            ? '#22d3ee'
+                            : '#1e293b'
+                        }
+                        strokeWidth={isSelected || isPath ? '2.5' : '1.5'}
+                        filter={isSelected || isPath ? 'url(#path-glow)' : 'none'}
+                        className="transition-all duration-200 group-hover:stroke-cyan-400"
+                      />
+
+                      <text
+                        textAnchor="middle"
+                        y={isCompact ? '-2' : '-3'}
+                        fill="#ffffff"
+                        fontSize={formatted.isSpecial ? (isCompact ? '8.5' : '10') : (isCompact ? '11' : '13')}
+                        fontWeight="bold"
+                        fontFamily="ui-monospace, monospace"
+                      >
+                        {formatted.display}
+                      </text>
+
+                      <text
+                        textAnchor="middle"
+                        y={isCompact ? '11' : '13'}
+                        fill="#94a3b8"
+                        fontSize={isCompact ? '8' : '9'}
+                        fontFamily="monospace"
+                      >
+                        {node.freq}
+                      </text>
+                    </g>
+                  );
+                }
+
+                // Internal Node
                 return (
                   <g
                     key={node.id}
                     transform={`translate(${node.x}, ${node.y})`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectSymbol(isSelected ? null : node.symbol);
-                    }}
-                    className="cursor-pointer group"
+                    className="cursor-default"
                   >
-                    {/* Leaf Card Shape */}
-                    <rect
-                      x="-38"
-                      y="-22"
-                      width="76"
-                      height="46"
-                      rx="10"
-                      fill={isSelected ? '#0c4a6e' : '#0f172a'}
-                      stroke={
-                        isSelected
-                          ? '#38bdf8'
-                          : isPath
-                          ? '#22d3ee'
-                          : '#1e293b'
-                      }
-                      strokeWidth={isSelected || isPath ? '2.5' : '1.5'}
-                      filter={isSelected || isPath ? 'url(#path-glow)' : 'none'}
-                      className="transition-all duration-200 group-hover:stroke-cyan-400"
+                    <circle
+                      r={internalR}
+                      fill={isPath ? '#164e63' : '#1e293b'}
+                      stroke={isPath ? '#06b6d4' : '#475569'}
+                      strokeWidth={isPath ? '2.5' : '1.5'}
+                      filter={isPath ? 'url(#path-glow)' : 'none'}
                     />
-
-                    {/* Symbol Display */}
                     <text
                       textAnchor="middle"
-                      y="-2"
-                      fill="#ffffff"
-                      fontSize={formatted.isSpecial ? '10' : '13'}
+                      dy="4"
+                      fill={isPath ? '#a5f3fc' : '#cbd5e1'}
+                      fontSize={isCompact ? '10' : '11'}
                       fontWeight="bold"
-                      fontFamily="ui-monospace, monospace"
-                    >
-                      {formatted.display}
-                    </text>
-
-                    {/* Frequency Badge */}
-                    <text
-                      textAnchor="middle"
-                      y="14"
-                      fill="#94a3b8"
-                      fontSize="9"
                       fontFamily="monospace"
                     >
-                      freq: {node.freq}
+                      {node.freq}
                     </text>
                   </g>
                 );
-              }
-
-              // Internal Node
-              return (
-                <g
-                  key={node.id}
-                  transform={`translate(${node.x}, ${node.y})`}
-                  className="cursor-default"
-                >
-                  <circle
-                    r="19"
-                    fill={isPath ? '#164e63' : '#1e293b'}
-                    stroke={isPath ? '#06b6d4' : '#475569'}
-                    strokeWidth={isPath ? '2.5' : '1.5'}
-                    filter={isPath ? 'url(#path-glow)' : 'none'}
-                  />
-                  <text
-                    textAnchor="middle"
-                    dy="4"
-                    fill={isPath ? '#a5f3fc' : '#cbd5e1'}
-                    fontSize="11"
-                    fontWeight="bold"
-                    fontFamily="monospace"
-                  >
-                    {node.freq}
-                  </text>
-                </g>
-              );
-            })}
+              })}
+            </g>
           </g>
         </svg>
 
         {/* Legend */}
-        <div className="absolute bottom-3 right-3 z-10 flex items-center space-x-3 bg-slate-950/80 border border-slate-800 backdrop-blur-md px-3 py-1.5 rounded-lg text-[11px] text-slate-400 font-mono">
-          <div className="flex items-center space-x-1.5">
+        <div className="absolute bottom-2.5 right-2.5 z-10 hidden sm:flex items-center space-x-3 bg-slate-950/80 border border-slate-800 backdrop-blur-md px-3 py-1.5 rounded-lg text-[10px] text-slate-400 font-mono">
+          <div className="flex items-center space-x-1">
             <span className="w-2.5 h-2.5 rounded-sm bg-slate-900 border border-slate-600 inline-block" />
-            <span>Leaf (Symbol)</span>
+            <span>Leaf</span>
           </div>
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1">
             <span className="w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-600 inline-block" />
-            <span>Internal Node (Sum)</span>
+            <span>Internal</span>
           </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-900 border border-cyan-400 inline-block" />
-            <span>Bit 0 (Left)</span>
+          <div className="flex items-center space-x-1">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" />
+            <span>0</span>
           </div>
-          <div className="flex items-center space-x-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-900 border border-amber-400 inline-block" />
-            <span>Bit 1 (Right)</span>
+          <div className="flex items-center space-x-1">
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" />
+            <span>1</span>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

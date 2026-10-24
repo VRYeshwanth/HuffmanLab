@@ -89,7 +89,7 @@ export default function EncodedOutput({
       </div>
 
       {/* Bitstream Scrollable Box */}
-      <div className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3 font-mono text-xs text-cyan-300/90 leading-relaxed break-all select-all max-h-[140px] overflow-y-auto">
+      <div className="w-full bg-slate-950 border border-slate-800/80 rounded-lg p-3 font-mono text-xs text-cyan-300/90 leading-relaxed break-all select-all max-h-35 overflow-y-auto">
         {formattedBits.text}
         {formattedBits.isTruncated && (
           <span className="text-slate-500 font-sans ml-2 text-[11px]">

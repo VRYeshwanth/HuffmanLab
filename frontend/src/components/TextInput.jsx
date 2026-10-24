@@ -67,7 +67,7 @@ export default function TextInput({
           onKeyDown={handleKeyDown}
           rows={5}
           placeholder="Enter or paste your text here..."
-          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all resize-y min-h-[120px]"
+          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm font-mono text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/50 transition-all resize-y min-h-30"
         />
 
         {error && (

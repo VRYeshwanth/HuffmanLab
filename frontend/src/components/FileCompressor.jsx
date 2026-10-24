@@ -252,7 +252,7 @@ export default function FileCompressor() {
                 <button
                   type="button"
                   onClick={downloadCompressedFile}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/25 transition-all"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-linear-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/25 transition-all"
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span>Download .huff File</span>
@@ -371,7 +371,7 @@ export default function FileCompressor() {
               {/* Preview */}
               <div className="space-y-1">
                 <span className="text-xs text-slate-400 font-medium">Restored Text Preview:</span>
-                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200 max-h-[180px] overflow-y-auto whitespace-pre-wrap select-all">
+                <div className="bg-slate-900 border border-slate-800 rounded-lg p-3 font-mono text-xs text-slate-200 max-h-45 overflow-y-auto whitespace-pre-wrap select-all">
                   {decompressResult.text}
                 </div>
               </div>
