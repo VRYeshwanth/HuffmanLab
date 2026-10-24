@@ -12,4 +12,5 @@ export default defineConfig({
     globals: true,
     environment: 'node',
   },
+  base: '/HuffmanLab/',
 })
